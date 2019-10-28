@@ -1,0 +1,103 @@
+---
+title: "Cheating and Ability: Additional Analyses"
+date: "5 October 2018"
+output: pdf_document
+header-includes:
+  - \usepackage{rotating}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rmarkdown)
+library(foreign)
+library(stargazer)
+options("scipen" = 100, "digits" = 3)
+require(MASS)
+```
+
+## Replication of Gibson et al.'s management game in Chile
+
+```{r}
+## Data preparation
+setwd("C:\\Users\\User\\Downloads")
+cheat <- read.csv2("entre1.csv")
+median(cheat$jnCorrectRET) # median is 6; threshold for classification
+cheat$ability <- ifelse(cheat$jnCorrectRET > 6, 1, 0)
+
+cheat$jedec <- cheat$jedec1 + cheat$jedec2 +
+  cheat$jedec3 + cheat$jedec4 + cheat$jedec5 # avoid multiple conditions
+
+cheat$cheating <- NA
+cheat$cheating <- ifelse(cheat$jedec == 5, 0,
+                      ifelse(cheat$jedec == 0, 2, 1)) # trichotomous classification
+
+# cheat == 0 = honest all the time (1 over all 5 rounds)
+# cheat == 1 = honest and cheat sometimes
+# cheat == 2 = cheat all the time (0 over all 5 rounds)
+# higher values -> more cheating
+
+cheat2 <- subset(cheat, subset = jAuditRate == 0) # look only at 0% audit sessions
+
+ # create binary variable ability
+prop.table(table(cheat$jnCorrectRET > 6))
+prop.table(table(cheat$ability)) #check for correct classification
+
+## Descriptive analysis
+m1 <- lm(jCheat ~ ability + jage_subject + jgender, data = cheat2)
+
+m2 <- lm(cheating ~ ability + jage_subject + jgender, data = cheat2)
+
+cheat2$cheating <- as.factor(cheat2$cheating)
+ordlog1 <- polr(cheating ~ ability + jage_subject + jgender, data = cheat2, Hess = TRUE)
+
+m3 <- lm(jCheat ~ ability + jage_subject + jgender, data = cheat)
+
+m4 <- lm(cheating ~ ability + jage_subject + jgender, data = cheat)
+
+cheat$cheating <- as.factor(cheat$cheating)
+ordlog2 <- polr(cheating ~ ability + jage_subject + jgender, data = cheat, Hess = TRUE)
+
+## weighted average approach
+# jedec1: 110 vs 520
+# jedec2: 207 vs 520
+# jedec3: 320 vs 520
+# jedec4: 420 vs 520
+# jedec5: 520 vs 520
+
+## weighting by incentives for truth (fraction of truth cost)
+w1 <- 110 / (110 + 520)
+w2 <- 207 / (207 + 520)
+w3 <- 320 / (320 + 520)
+w4 <- 420 / (420 + 520)
+w5 <- 520 / (520 + 520)
+
+## weighted truth average for each participant
+cheat$truthavg <- (cheat$jedec1 * w1 + cheat$jedec2 * w2 + cheat$jedec3 * w3 +
+                     cheat$jedec4 * w4 + cheat$jedec5 * w5) / 5
+m5 <- lm(truthavg ~ ability + jage_subject + jgender, data = cheat)
+```
+
+```{r, results = "asis"}
+library(stargazer)
+stargazer(m1, m2, m3, m4, m5, ordlog1, ordlog2, header = FALSE, type = "latex",
+          title = "Ability and Cheating",
+          keep.stat = "n",
+          dep.var.labels = c("CheatPG0", "CheatGibson0", "CheatPGall", "CheatGibsonall", "CheatGibsonalt", "OrdlogGibson"),
+          covariate.labels = c("Ability", "Age", "Gender"),
+          float.env = "sidewaystable")
+```
+
+## Replication of management game in Gibson et al.
+
+```{r, results = "asis"}
+setwd("C:\\Users\\User\\Downloads")
+gibson1 <- read.dta("gibson.dta")
+gibson2 <- read.dta("gibsonfull.dta")
+# Focus on ratiocorrect in gibson1 (ability) and truth in gibson 2 (lying)
+gibson <- data.frame(id = gibson1$vpn, ability = gibson1$ratiocorrect, truth = gibson2$truth,
+                     sex = gibson2$sex, age = gibson2$age)
+model1 <- lm(truth ~ ability + sex + age, data = gibson)
+stargazer(model1, header = FALSE, type = "latex", title = "Ability and Cheating in Gibson et al.",
+          keep.stat = "n")
+```
+
